@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  font-family: 'Outfit', sans-serif;
+}
+
+body {
+  background: linear-gradient(135deg, #0A0F1A 0%, #0d1320 50%, #0f172a 100%);
+  min-height: 100vh;
+}
+
+/* Jupiter Green gradient text */
+.jup-gradient {
+  background: linear-gradient(135deg, #C7F284 0%, #8BE8CB 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass morphing panel */
+.glass-panel {
+  background: linear-gradient(145deg, rgba(17, 24, 39, 0.9) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px solid rgba(199, 242, 132, 0.1);
+  box-shadow: 
+    0 0 80px rgba(199, 242, 132, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+}
+
+/* Step card */
+.step-card {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.3) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-card:hover {
+  border-color: rgba(199, 242, 132, 0.3);
+  transform: translateX(8px);
+  box-shadow: 0 0 30px rgba(199, 242, 132, 0.1);
+}
+
+.step-card:hover .step-number {
+  background: linear-gradient(135deg, #C7F284 0%, #8BE8CB 100%);
+  color: #0A0F1A;
+}
+
+/* Flow connection line */
+.flow-line {
+  position: relative;
+}
+
+.flow-line::after {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: 60px;
+  bottom: -20px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(199, 242, 132, 0.3) 0%, rgba(199, 242, 132, 0.05) 100%);
+}
+
+.flow-line:last-child::after {
+  display: none;
+}
+
+/* Dynamic connection line */
+.connecting-line {
+  stroke-dasharray: 8 4;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: -12; }
+}
+
+/* Button style */
+.execute-btn {
+  background: linear-gradient(135deg, #C7F284 0%, #9AE6B4 100%);
+  color: #0A0F1A;
+  font-weight: 700;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.execute-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transition: left 0.5s;
+}
+
+.execute-btn:hover::before {
+  left: 100%;
+}
+
+.execute-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(199, 242, 132, 0.3);
+}
+
+.execute-btn:active {
+  transform: translateY(0);
+}
+
+.execute-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.execute-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.execute-btn:disabled::before {
+  display: none;
+}
+
+/* Background grid */
+.grid-bg {
+  background-image: 
+    linear-gradient(rgba(199, 242, 132, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(199, 242, 132, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Loading animation */
+.loading-spinner {
+  border: 2px solid rgba(10, 15, 26, 0.3);
+  border-top: 2px solid #0A0F1A;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Success status */
+.btn-success {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+}
+
+/* Status Badge */
+.status-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+}
+
+/* Visual node */
+.visual-node {
+  /* Static - no hover effect */
+}
+
