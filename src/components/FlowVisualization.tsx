@@ -26,61 +26,67 @@ export function FlowVisualization({ txStatus }: FlowVisualizationProps) {
 
       {/* SVG Flow Diagram */}
       <div className="relative w-full" style={{ height: '580px' }}>
-        <svg 
-          className="absolute inset-0 w-full h-full" 
-          viewBox="0 0 400 580" 
+        <svg
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 400 580"
           preserveAspectRatio="xMidYMid meet"
         >
           {/* Connection Lines */}
           {/* Wallet to Engine */}
-          <path 
-            className="connecting-line" 
-            d="M 200 60 L 200 105" 
-            stroke="#C7F284" 
-            strokeWidth="2" 
-            fill="none" 
+          <path
+            key="line-wallet-engine"
+            className="connecting-line"
+            d="M 200 60 L 200 105"
+            stroke="#C7F284"
+            strokeWidth="2"
+            fill="none"
             opacity="0.5"
           />
           {/* Engine to Jupiter */}
-          <path 
-            className="connecting-line" 
-            d="M 200 190 L 100 240" 
-            stroke="#C7F284" 
-            strokeWidth="2" 
-            fill="none" 
-            opacity="0.5" 
+          <path
+            key="line-engine-jupiter"
+            className="connecting-line"
+            d="M 200 190 L 100 240"
+            stroke="#C7F284"
+            strokeWidth="2"
+            fill="none"
+            opacity="0.5"
             style={{ animationDelay: '-0.3s' }}
           />
           {/* Engine to Drift */}
-          <path 
-            className="connecting-line" 
-            d="M 200 190 L 300 240" 
-            stroke="#C7F284" 
-            strokeWidth="2" 
-            fill="none" 
-            opacity="0.5" 
+          <path
+            key="line-engine-drift"
+            className="connecting-line"
+            d="M 200 190 L 300 240"
+            stroke="#C7F284"
+            strokeWidth="2"
+            fill="none"
+            opacity="0.5"
             style={{ animationDelay: '-0.6s' }}
           />
           {/* Jupiter to Event Wallet */}
-          <path 
-            className="connecting-line" 
-            d="M 100 310 L 200 360" 
-            stroke="#C7F284" 
-            strokeWidth="2" 
-            fill="none" 
+          <path
+            key="line-jupiter-event"
+            className="connecting-line"
+            d="M 100 310 L 200 360"
+            stroke="#C7F284"
+            strokeWidth="2"
+            fill="none"
             opacity="0.4"
           />
           {/* Drift to Event Wallet */}
-          <path 
-            className="connecting-line" 
-            d="M 300 310 L 200 360" 
-            stroke="#C7F284" 
-            strokeWidth="2" 
-            fill="none" 
+          <path
+            key="line-drift-event"
+            className="connecting-line"
+            d="M 300 310 L 200 360"
+            stroke="#C7F284"
+            strokeWidth="2"
+            fill="none"
             opacity="0.4"
           />
           {/* Event Wallet to Telegram */}
           <path
+            key="line-event-telegram"
             className="connecting-line"
             d="M 200 440 L 200 490"
             stroke="#22D3EE"
