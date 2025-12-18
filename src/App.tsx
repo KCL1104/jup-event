@@ -1,28 +1,32 @@
-import { 
-  Header, 
-  HeroSection, 
-  StepsPanel, 
-  FlowVisualization, 
-  FeatureCards, 
+import {
+  Header,
+  HeroSection,
+  StepsPanel,
+  FlowVisualization,
+  FeatureCards,
   Footer,
-  BackgroundEffects 
+  BackgroundEffects,
+  TokenSelectionModal
 } from './components'
 import { useWallet } from './hooks/useWallet'
 
 function App() {
-  const { 
-    walletAddress, 
-    isLoading, 
-    isSuccess, 
-    buttonText, 
-    txStatus, 
-    execute 
+  const {
+    walletAddress,
+    isLoading,
+    isSuccess,
+    buttonText,
+    txStatus,
+    execute,
+    showTokenModal,
+    closeTokenModal,
+    executeWithToken
   } = useWallet()
 
   return (
     <div className="text-white overflow-x-hidden min-h-screen">
       <BackgroundEffects />
-      
+
       <Header walletAddress={walletAddress} />
 
       <main className="relative z-10 max-w-7xl mx-auto px-8 py-12">
@@ -30,7 +34,7 @@ function App() {
 
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-          <StepsPanel 
+          <StepsPanel
             isLoading={isLoading}
             isSuccess={isSuccess}
             buttonText={buttonText}
@@ -43,6 +47,13 @@ function App() {
       </main>
 
       <Footer />
+
+      {/* Token Selection Modal */}
+      <TokenSelectionModal
+        isOpen={showTokenModal}
+        onClose={closeTokenModal}
+        onSelect={executeWithToken}
+      />
     </div>
   )
 }

@@ -5,5 +5,6 @@ export { FlowVisualization } from './FlowVisualization'
 export { FeatureCards } from './FeatureCards'
 export { Footer } from './Footer'
 export { BackgroundEffects } from './BackgroundEffects'
+export { TokenSelectionModal, type InputToken } from './TokenSelectionModal'
 
 

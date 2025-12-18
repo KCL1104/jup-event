@@ -11,7 +11,7 @@ const steps = [
   {
     number: 1,
     title: 'Buy JUP',
-    description: 'Swap USDC to JUP via Jupiter Aggregator for best rates.',
+    description: 'Swap SOL or USDC to JUP via Jupiter Aggregator for best rates.',
     tag: 'Jupiter Swap',
     colorClass: 'yellow',
     icon: ArrowLeftRight,

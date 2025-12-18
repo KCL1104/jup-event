@@ -1,17 +1,20 @@
-// Supabase Edge Function: Verify Wallet Address
-// Validates Solana wallet address structure using Base58 decoding
+// Supabase Edge Function: Verify Wallet Address and Sync User
+// Validates Solana wallet address and upserts user to database
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // Base58 alphabet used by Solana
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 interface VerifyRequest {
     wallet_address: string
+    sync_user?: boolean  // Optional: whether to upsert user to database
 }
 
 interface VerifyResponse {
     valid: boolean
+    synced?: boolean
     error?: string
 }
 
@@ -104,15 +107,18 @@ function validateSolanaWalletAddress(address: string): VerifyResponse {
 }
 
 serve(async (req) => {
+    // CORS headers for all responses
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    }
+
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             status: 204,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            },
+            headers: corsHeaders,
         })
     }
 
@@ -124,7 +130,7 @@ serve(async (req) => {
                 status: 405,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
+                    ...corsHeaders,
                 },
             }
         )
@@ -134,11 +140,75 @@ serve(async (req) => {
         const body: VerifyRequest = await req.json()
         const result = validateSolanaWalletAddress(body.wallet_address)
 
+        // If wallet is invalid, return early
+        if (!result.valid) {
+            return new Response(JSON.stringify(result), {
+                status: 400,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...corsHeaders,
+                },
+            })
+        }
+
+        // If sync_user is requested, upsert the user to database
+        if (body.sync_user) {
+            // Use service_role key to bypass RLS (only available in Edge Functions)
+            const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+            const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+            const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+
+            const { error: upsertError } = await supabaseAdmin
+                .from('users')
+                .upsert(
+                    {
+                        wallet_address: body.wallet_address.trim(),
+                        catpurr: true,
+                        last_active_at: new Date().toISOString(),
+                    },
+                    {
+                        onConflict: 'wallet_address',
+                    }
+                )
+
+            if (upsertError) {
+                console.error('Failed to upsert user:', upsertError)
+                return new Response(
+                    JSON.stringify({
+                        valid: true,
+                        synced: false,
+                        error: `Failed to sync user: ${upsertError.message}`
+                    }),
+                    {
+                        status: 500,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...corsHeaders,
+                        },
+                    }
+                )
+            }
+
+            console.log('User synced successfully:', body.wallet_address)
+            return new Response(
+                JSON.stringify({ valid: true, synced: true }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...corsHeaders,
+                    },
+                }
+            )
+        }
+
+        // Just verify, don't sync
         return new Response(JSON.stringify(result), {
-            status: result.valid ? 200 : 400,
+            status: 200,
             headers: {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
+                ...corsHeaders,
             },
         })
     } catch (err) {
@@ -157,3 +227,4 @@ serve(async (req) => {
         )
     }
 })
+
