@@ -1,136 +1,350 @@
-import { ListChecks, ArrowLeftRight, TrendingUp, Send, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { Zap, Copy, AlertTriangle, ShieldCheck, Flame, Settings, TrendingUp, TrendingDown } from 'lucide-react'
+import { ExecutionMode, DegenConfig } from '../types'
+import { DisclaimerModal } from './DisclaimerModal'
+import { DegenConfigModal } from './DegenConfigModal'
+import { WalletBalances, validateDegenConfig, calculatePositionSizeJup } from '../hooks/useWalletBalance'
+
+// Debug mode: use 10 JUP for testing, 250 JUP for production
+const isDebugMode = import.meta.env.VITE_DEBUG_MODE === 'true'
+const MIN_JUP_AMOUNT = isDebugMode ? 10 : 250
 
 interface StepsPanelProps {
   isLoading: boolean
   isSuccess: boolean
+  isCompleted: boolean
   buttonText: string
   onExecute: () => void
+  onCopyTransferTx?: () => void
+  selectedMode: ExecutionMode
+  onModeChange: (mode: ExecutionMode) => void
+  // Degen mode props
+  degenConfig?: DegenConfig
+  onDegenConfigChange?: (config: DegenConfig) => void
+  walletBalances?: WalletBalances | null
+  jupPrice?: number
+  solPrice?: number
 }
 
-const steps = [
+const hedgeSteps = [
   {
     number: 1,
     title: 'Buy JUP',
-    description: 'Swap SOL or USDC to JUP via Jupiter Aggregator for best rates.',
+    description: 'Swap assets to JUP via Jupiter Aggregator for best rates.',
     tag: 'Jupiter Swap',
-    colorClass: 'yellow',
-    icon: ArrowLeftRight,
   },
   {
     number: 2,
-    title: 'Short JUP',
-    description: 'Open 1x short position to neutralize price volatility risk.',
+    title: '1x Short JUP',
+    description: 'Open 1x short position to neutralize price risk.',
     tag: 'Drift Protocol',
-    colorClass: 'purple',
-    icon: TrendingUp,
   },
   {
     number: 3,
     title: 'Send to Event',
-    description: 'Transfer hedged JUP directly to the event participation address.',
+    description: 'Transfer hedged JUP directly to the official event vault.',
     tag: 'Transfer',
-    colorClass: 'jup',
-    icon: Send,
+  },
+  {
+    number: 4,
+    title: 'Telegram Notification',
+    description: 'Receive confirmation and updates via Telegram.',
+    tag: 'Notification',
   },
 ]
 
-const colorMap: Record<string, { bg: string; text: string; border: string; tagBg: string }> = {
-  yellow: {
-    bg: 'bg-yellow-500/10',
-    text: 'text-yellow-400',
-    border: 'border-yellow-500/30',
-    tagBg: 'bg-yellow-500/20',
+const standardSteps = [
+  {
+    number: 1,
+    title: 'Buy JUP',
+    description: 'Swap assets to JUP via Jupiter Aggregator for best rates.',
+    tag: 'Jupiter Swap',
   },
-  purple: {
-    bg: 'bg-purple-500/10',
-    text: 'text-purple-400',
-    border: 'border-purple-500/30',
-    tagBg: 'bg-purple-500/20',
+  {
+    number: 2,
+    title: 'Send to Event',
+    description: 'Transfer JUP directly to the official event vault.',
+    tag: 'Transfer',
   },
-  jup: {
-    bg: 'bg-jup-green/10',
-    text: 'text-jup-green',
-    border: 'border-jup-green/30',
-    tagBg: 'bg-jup-green/20',
+  {
+    number: 3,
+    title: 'Telegram Notification',
+    description: 'Receive confirmation and updates via Telegram.',
+    tag: 'Notification',
   },
+]
+
+// Dynamic degen steps based on configuration
+const getDegenSteps = (config?: DegenConfig, positionSize?: number) => {
+  const leverage = config?.leverage || 1
+  const direction = config?.direction || 'long'
+  const directionLabel = direction === 'long' ? 'Long' : 'Short'
+  const collateral = config?.collateralAmount || 0
+  const token = config?.collateralToken || 'SOL'
+  const positionDisplay = positionSize && positionSize > 0 ? `${positionSize.toLocaleString()} JUP` : ''
+
+  return [
+    {
+      number: 1,
+      title: 'Buy JUP',
+      description: 'Swap assets to JUP via Jupiter Aggregator for best rates.',
+      tag: 'Jupiter Swap',
+    },
+    {
+      number: 2,
+      title: `${leverage}x ${directionLabel} JUP`,
+      description: collateral > 0 && positionDisplay
+        ? `Open ${positionDisplay} position with ${collateral} ${token} collateral.`
+        : `Open ${leverage}x ${direction} position on JUP-PERP.`,
+      tag: 'Drift Protocol',
+    },
+    {
+      number: 3,
+      title: 'Send to Event',
+      description: 'Transfer JUP directly to the official event vault.',
+      tag: 'Transfer',
+    },
+    {
+      number: 4,
+      title: 'Telegram Notification',
+      description: 'Receive confirmation and updates via Telegram.',
+      tag: 'Notification',
+    },
+  ]
 }
 
-export function StepsPanel({ isLoading, isSuccess, buttonText, onExecute }: StepsPanelProps) {
+export function StepsPanel({
+  isLoading,
+  isSuccess: _isSuccess,
+  isCompleted,
+  buttonText: _buttonText,
+  onExecute,
+  onCopyTransferTx,
+  selectedMode,
+  onModeChange,
+  degenConfig,
+  onDegenConfigChange,
+  walletBalances,
+  jupPrice = 0,
+  solPrice = 0,
+}: StepsPanelProps) {
+  // Note: isSuccess and buttonText are kept for API compatibility but not currently used
+  void _isSuccess
+  void _buttonText
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
+  const [showDegenModal, setShowDegenModal] = useState(false)
+
+  // Calculate position size dynamically based on collateral
+  const positionSizeJup = degenConfig
+    ? calculatePositionSizeJup(
+      degenConfig.collateralAmount,
+      degenConfig.collateralToken,
+      degenConfig.leverage,
+      jupPrice,
+      solPrice
+    )
+    : 0
+
+  // Calculate swap cost for JUP based on collateral token (uses debug-aware MIN_JUP_AMOUNT)
+  const swapCost = degenConfig && jupPrice > 0
+    ? degenConfig.collateralToken === 'SOL'
+      ? solPrice > 0 ? (MIN_JUP_AMOUNT * jupPrice) / solPrice : 0
+      : MIN_JUP_AMOUNT * jupPrice
+    : 0
+
+  // Get steps based on mode (degen steps are dynamic)
+  const steps = selectedMode === 'hedge'
+    ? hedgeSteps
+    : selectedMode === 'degen'
+      ? getDegenSteps(degenConfig, positionSizeJup)
+      : standardSteps
+
+  const strategyTitle = selectedMode === 'hedge' ? 'Hedge Register' : selectedMode === 'standard' ? 'Standard Register' : 'Degen Strategy'
+  const strategySubtitle = selectedMode === 'hedge' ? 'Participate in CatLumpurr 2026 for the event rewards and community benefits, not to speculate on whether JUP will go up or down during the lock-up period.' : selectedMode === 'standard' ? 'Direct Asset Deployment' : 'Leveraged Speculation'
+
+  // Validate degen config for execute button state
+  const isDegenValid = selectedMode === 'degen' && degenConfig && walletBalances
+    ? validateDegenConfig(degenConfig, walletBalances).isValid
+    : true
+
+  // Degen mode requires valid config to execute
+  const isDegenDisabled = selectedMode === 'degen' && (!degenConfig || !isDegenValid)
+
   return (
-    <div className="glass-panel rounded-3xl p-8 lg:p-10">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-jup-green/10 flex items-center justify-center">
-          <ListChecks className="w-6 h-6 text-jup-green" />
+    <div className="bg-[#E4EAF2] rounded-[24px] p-3 sm:p-4 lg:p-5 relative overflow-visible transition-all duration-500 flex flex-col z-10 w-full min-w-0 max-w-full outline outline-2 outline-[#0E0F28] shadow-[0px_2px_0px_black]">
+      {/* Tab Selector */}
+      <div className="flex bg-[#EDF4F8] px-2 sm:px-3 py-2 rounded-2xl mb-2 sm:mb-3 lg:mb-4 relative z-10 gap-1 outline outline-2 outline-[#0E0F28] outline-offset-[-2px] shadow-[0px_4px_0px_#0E0F28] min-w-0">
+        {/* Standard Tab */}
+        <button
+          onClick={() => onModeChange('standard')}
+          className={`flex-1 h-12 px-2 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 min-w-0 ${selectedMode === 'standard'
+            ? 'bg-[#2050F2] text-[#EDF4F8] outline outline-1 outline-[#0E0F28]'
+            : 'bg-[#E4EAF2] text-[#0E0F28]'
+            }`}
+        >
+          <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px]" />
+          <span className="hidden sm:inline">Standard</span>
+          <span className="sm:hidden">Std</span>
+        </button>
+
+        {/* Hedge Tab */}
+        <button
+          onClick={() => onModeChange('hedge')}
+          className={`flex-1 h-12 px-2 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 min-w-0 ${selectedMode === 'hedge'
+            ? 'bg-[#2050F2] text-[#EDF4F8] outline outline-1 outline-[#0E0F28]'
+            : 'bg-[#E4EAF2] text-[#0E0F28]'
+            }`}
+        >
+          <Zap size={12} className="sm:w-[14px] sm:h-[14px]" />
+          <span>Hedge</span>
+        </button>
+
+        {/* Degen Tab - Now Enabled */}
+        <button
+          onClick={() => onModeChange('degen')}
+          className={`flex-1 h-12 px-2 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 min-w-0 ${selectedMode === 'degen'
+            ? 'bg-[#2050F2] text-[#EDF4F8] outline outline-1 outline-[#0E0F28]'
+            : 'bg-[#E4EAF2] text-[#0E0F28]'
+            }`}
+        >
+          <Flame size={12} className="sm:w-[14px] sm:h-[14px]" />
+          <span>Degen</span>
+        </button>
+      </div>
+
+      {/* Degen Configuration Summary & Modal Trigger */}
+      {selectedMode === 'degen' && degenConfig && onDegenConfigChange && (
+        <div className="mb-2 sm:mb-3">
+          {/* Compact settings summary */}
+          <div className="bg-white rounded-xl p-3 border-2 border-[#0E0F28] shadow-[0px_2px_0px_black]">
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                {degenConfig.direction === 'long' ? (
+                  <TrendingUp size={14} className="text-emerald-500" />
+                ) : (
+                  <TrendingDown size={14} className="text-red-500" />
+                )}
+                <span className="text-xs font-bold text-[#0E0F28]">
+                  {degenConfig.leverage}x {degenConfig.direction.toUpperCase()}
+                </span>
+              </div>
+              <span className="text-xs font-medium text-[#0E0F28]/70">
+                {degenConfig.collateralAmount > 0
+                  ? `${degenConfig.collateralAmount} ${degenConfig.collateralToken}`
+                  : 'Not configured'}
+              </span>
+            </div>
+            {positionSizeJup > 0 && (
+              <div className="text-[10px] text-[#0E0F28]/60">
+                Position: {positionSizeJup.toLocaleString()} JUP (${(positionSizeJup * jupPrice).toFixed(2)})
+              </div>
+            )}
+          </div>
+          {/* Configure button */}
+          <button
+            onClick={() => setShowDegenModal(true)}
+            className="w-full mt-2 py-2 px-4 rounded-lg bg-[#E4EAF2] text-[#0E0F28] border-2 border-[#0E0F28] shadow-[0px_2px_0px_black] font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:-translate-y-[1px] hover:shadow-[0px_3px_0px_black] active:translate-y-[1px] active:shadow-[0px_1px_0px_black] transition-all duration-200"
+          >
+            <Settings size={14} />
+            Configure Position
+          </button>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-white">How It Works</h2>
-          <p className="text-gray-500 text-sm">3 steps, 1 signature</p>
-        </div>
+      )}
+
+      {/* Strategy Title */}
+      <div className="mb-2 sm:mb-3 relative z-10">
+        <h3 className="text-base sm:text-lg lg:text-xl font-black italic tracking-tight mb-0.5 uppercase text-[#0E0F28]">{strategyTitle}</h3>
+        <p className="text-[10px] sm:text-xs text-[#0E0F28] font-bold uppercase tracking-widest">
+          {strategySubtitle}
+        </p>
       </div>
 
       {/* Steps */}
-      <div className="space-y-4">
-        {steps.map((step, index) => {
-          const colors = colorMap[step.colorClass]
-          const Icon = step.icon
-          const isLast = index === steps.length - 1
-          
-          return (
-            <div 
-              key={step.number} 
-              className={`step-card rounded-2xl p-5 cursor-default ${!isLast ? 'flow-line' : ''}`}
+      <div className="flex-1 mb-2 sm:mb-3 relative z-10 min-h-0 pb-1">
+        <div className="space-y-2 sm:space-y-2.5 pb-1">
+          {steps.map((step) => (
+            <div
+              key={step.number}
+              className="p-2 sm:p-2.5 rounded-lg bg-[#E4EAF2] border-2 border-[#0E0F28] shadow-[0px_2px_0px_black] flex items-start gap-2 transition-all group"
             >
-              <div className="flex items-start gap-4">
-                <div 
-                  className={`step-number w-10 h-10 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center font-bold text-lg border ${colors.border} transition-all`}
-                >
-                  {step.number}
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white text-[#0E0F28] outline outline-2 outline-[#0E0F28] shadow-[0px_2px_0px_black] flex items-center justify-center font-black text-[10px] sm:text-xs shrink-0 mt-0.5">
+                {step.number}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-1 gap-2">
+                  <h4 className="text-[11px] sm:text-xs font-black uppercase tracking-wider group-hover:text-[#0E0F28] truncate text-[#0E0F28]">{step.title}</h4>
+                  <span className="text-[9px] sm:text-[10px] text-[#0E0F28] font-bold uppercase tracking-tighter shrink-0">{step.tag}</span>
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-white">{step.title}</h3>
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${colors.tagBg} ${colors.text} font-mono`}>
-                      {step.tag}
-                    </span>
-                  </div>
-                  <p className="text-gray-400 text-sm">{step.description}</p>
-                </div>
-                <div className={colors.text}>
-                  <Icon className="w-5 h-5" />
-                </div>
+                <p className="text-[10px] sm:text-[11px] text-[#0E0F28] leading-snug">{step.description}</p>
               </div>
             </div>
-          )
-        })}
+          ))}
+        </div>
       </div>
 
       {/* Execute Button */}
-      <div className="mt-8">
-        <button 
-          onClick={onExecute}
-          disabled={isLoading}
-          className={`execute-btn w-full py-4 px-8 rounded-xl text-lg flex items-center justify-center gap-3 ${isSuccess ? 'btn-success' : ''}`}
+      <div className="mt-auto space-y-2 sm:space-y-2.5 relative z-10">
+        <button
+          onClick={isCompleted ? onCopyTransferTx : onExecute}
+          disabled={isLoading || isDegenDisabled}
+          className={`w-full py-3 sm:py-4 rounded-xl font-black text-xs sm:text-base tracking-wider sm:tracking-[0.2em] uppercase flex items-center justify-center gap-2 sm:gap-3 transition-all duration-200 min-w-0 ${isDegenDisabled
+            ? 'bg-[#E4EAF2] text-[#0E0F28]/40 outline outline-2 outline-[#0E0F28]/40 shadow-[0px_2px_0px_#0E0F28]/40 cursor-not-allowed'
+            : 'bg-[#2050F2] text-white outline outline-2 outline-[#0E0F28] shadow-[0px_2px_0px_#0E0F28] hover:-translate-y-[1px] hover:shadow-[0px_3px_0px_#0E0F28] active:translate-y-[1px] active:shadow-[0px_1px_0px_#0E0F28]'
+            }`}
         >
           {isLoading ? (
+            <div className="w-5 h-5 sm:w-6 sm:h-6 border-3 border-[#2050F2]/20 border-t-[#2050F2] rounded-full animate-spin" />
+          ) : isCompleted ? (
             <>
-              <div className="loading-spinner" />
-              <span>{buttonText}</span>
+              <Copy size={18} className="sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline">GET TRANSFER TX</span>
+              <span className="sm:hidden">GET TX</span>
             </>
           ) : (
             <>
-              <Zap className="w-5 h-5" />
-              <span>{buttonText}</span>
+              {selectedMode === 'degen' ? (
+                <Flame size={18} className="sm:w-5 sm:h-5" fill="currentColor" />
+              ) : (
+                <Zap size={18} className="sm:w-5 sm:h-5" fill="currentColor" />
+              )}
+              <span className="hidden sm:inline">EXECUTE NOW</span>
+              <span className="sm:hidden">EXECUTE</span>
             </>
           )}
         </button>
-        <p className="text-center text-gray-500 text-xs mt-4 flex items-center justify-center gap-2">
-          <span className="w-4 h-4 rounded-full bg-gray-700 flex items-center justify-center text-[10px]">i</span>
-          Uses Jito Bundles for atomic execution. Requires Phantom Wallet.
-        </p>
+
+        {/* Disclaimer Button - Only show for hedge mode */}
+        {selectedMode === 'hedge' && (
+          <button
+            onClick={() => setShowDisclaimer(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-[#E4EAF2] text-[#0E0F28] outline outline-2 outline-[#0E0F28] shadow-[0px_2px_0px_black] rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0px_3px_0px_black] active:translate-y-[1px] active:shadow-[0px_1px_0px_black]"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Risk Info</span>
+          </button>
+        )}
       </div>
+
+      {/* Disclaimer Modal */}
+      <DisclaimerModal
+        isOpen={showDisclaimer}
+        onClose={() => setShowDisclaimer(false)}
+        mode={selectedMode}
+      />
+
+      {/* Degen Config Modal */}
+      {degenConfig && onDegenConfigChange && (
+        <DegenConfigModal
+          isOpen={showDegenModal}
+          onClose={() => setShowDegenModal(false)}
+          config={degenConfig}
+          onConfigChange={onDegenConfigChange}
+          walletBalances={walletBalances || null}
+          jupPrice={jupPrice}
+          solPrice={solPrice}
+          swapCost={swapCost}
+        />
+      )}
     </div>
   )
 }
-
-

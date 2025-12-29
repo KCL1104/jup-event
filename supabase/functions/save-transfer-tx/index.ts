@@ -1,22 +1,15 @@
-// Supabase Edge Function: Save Drift History
-// Appends drift operation results to user's drift_hist field
+// Supabase Edge Function: Save Transfer TX
+// Saves the JUP transfer transaction signature to user's transfer_tx field
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-interface DriftHistoryRequest {
+interface SaveTransferTxRequest {
     wallet_address: string
-    drift_result: {
-        success: boolean
-        timestamp: string
-        shortAmount?: number
-        depositAmount?: number
-        error?: string
-        [key: string]: unknown
-    }
+    transfer_tx: string
 }
 
-interface DriftHistoryResponse {
+interface SaveTransferTxResponse {
     success: boolean
     error?: string
 }
@@ -52,7 +45,7 @@ serve(async (req) => {
     }
 
     try {
-        const body: DriftHistoryRequest = await req.json()
+        const body: SaveTransferTxRequest = await req.json()
 
         // Validate request
         if (!body.wallet_address || typeof body.wallet_address !== 'string') {
@@ -68,9 +61,9 @@ serve(async (req) => {
             )
         }
 
-        if (!body.drift_result || typeof body.drift_result !== 'object') {
+        if (!body.transfer_tx || typeof body.transfer_tx !== 'string') {
             return new Response(
-                JSON.stringify({ success: false, error: 'drift_result is required' }),
+                JSON.stringify({ success: false, error: 'transfer_tx is required' }),
                 {
                     status: 400,
                     headers: {
@@ -87,41 +80,17 @@ serve(async (req) => {
 
         const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-        // First, get the current drift_hist for the user
-        const { data: userData, error: fetchError } = await supabaseAdmin
-            .from('users')
-            .select('drift_hist')
-            .eq('wallet_address', body.wallet_address.trim())
-            .single()
-
-        if (fetchError) {
-            console.error('Failed to fetch user:', fetchError)
-            return new Response(
-                JSON.stringify({ success: false, error: `User not found: ${fetchError.message}` }),
-                {
-                    status: 404,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...corsHeaders,
-                    },
-                }
-            )
-        }
-
-        // Overwrite the drift_hist with the new result (not append)
-        const newHistory = body.drift_result
-
-        // Update the user's drift_hist
+        // Update the user's transfer_tx
         const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({
-                drift_hist: newHistory,
+                transfer_tx: body.transfer_tx.trim(),
                 last_active_at: new Date().toISOString(),
             })
             .eq('wallet_address', body.wallet_address.trim())
 
         if (updateError) {
-            console.error('Failed to update drift_hist:', updateError)
+            console.error('Failed to update transfer_tx:', updateError)
             return new Response(
                 JSON.stringify({ success: false, error: `Failed to save: ${updateError.message}` }),
                 {
@@ -134,7 +103,7 @@ serve(async (req) => {
             )
         }
 
-        console.log('Drift history saved for:', body.wallet_address)
+        console.log('Transfer TX saved for:', body.wallet_address, 'tx:', body.transfer_tx)
         return new Response(
             JSON.stringify({ success: true }),
             {

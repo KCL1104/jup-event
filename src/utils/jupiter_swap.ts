@@ -2,8 +2,9 @@ import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteResponse } from '@jup-ag/api';
 import { TOKEN_ADDRESS, TokenTicker } from '../types';
 
-// Constants for minimum JUP output
-const MINIMUM_JUP_OUTPUT = 250;
+// const MINIMUM_JUP_OUTPUT = 250;
+const isDebugMode = import.meta.env.VITE_DEBUG_MODE === 'true';
+const MINIMUM_JUP_OUTPUT = isDebugMode ? 10 : 250;
 const BUFFER_PERCENTAGE = 1.05; // 5% buffer
 
 // Token mint addresses for price API
@@ -102,6 +103,52 @@ export async function calculateRequiredUsdcForMinimumJup(): Promise<{
     jupPrice,
     targetJupAmount,
     minimumJupOutput: MINIMUM_JUP_OUTPUT,
+  };
+}
+
+/**
+ * Calculate required deposit for Drift short position (1x leverage = 100% margin)
+ * Debug mode: fixed 10 USDC or 0.05 SOL
+ * Production mode: round up to nearest integer (Math.ceil)
+ * @param shortAmount - Amount of JUP to short
+ * @param collateralToken - Token to use as collateral ('USDC' or 'SOL')
+ * @returns Object containing calculated deposit amount and price info
+ */
+export async function calculateRequiredDepositForShort(
+  shortAmount: number,
+  collateralToken: 'USDC' | 'SOL' = 'USDC'
+): Promise<{
+  depositAmount: number;
+  jupPrice: number;
+  shortAmount: number;
+  collateralToken: 'USDC' | 'SOL';
+}> {
+  const { jupPrice, solPrice } = await getJupiterPrices();
+
+  let depositAmount: number;
+
+  if (collateralToken === 'SOL') {
+    // Calculate SOL deposit (JUP value in USD / SOL price in USD)
+    // Multiply by 1.30 because SOL collateral has 80% initial asset weight in Drift
+    // (1/0.8 = 1.25 + extra buffer for safety)
+    // Round up to 2 decimal places (0.01 SOL precision)
+    const SOL_COLLATERAL_BUFFER = 1.30;
+    const rawDeposit = ((shortAmount * jupPrice) / solPrice) * SOL_COLLATERAL_BUFFER;
+    // Math.ceil with 2 decimal places: multiply by 100, ceil, divide by 100
+    depositAmount = isDebugMode ? 0.1 : Math.ceil(rawDeposit * 100) / 100;
+    console.log(`Calculated deposit for ${shortAmount} JUP short: ${depositAmount.toFixed(2)} SOL (JUP price: $${jupPrice.toFixed(4)}, SOL price: $${solPrice.toFixed(2)}, raw: ${rawDeposit.toFixed(4)}, with 1.30x buffer, rounded up)`);
+  } else {
+    // Calculate USDC deposit (1:1 with USD)
+    const rawDeposit = shortAmount * jupPrice;
+    depositAmount = isDebugMode ? 10 : Math.ceil(rawDeposit);
+    console.log(`Calculated deposit for ${shortAmount} JUP short: ${depositAmount} USDC (JUP price: $${jupPrice.toFixed(4)}, raw: ${rawDeposit.toFixed(2)})`);
+  }
+
+  return {
+    depositAmount,
+    jupPrice,
+    shortAmount,
+    collateralToken,
   };
 }
 
@@ -388,11 +435,11 @@ export function verifyTransactionBase64(transaction: VersionedTransaction): {
   try {
     const serialized = transaction.serialize();
     const base64 = Buffer.from(serialized).toString('base64');
-    
+
     // Verify round-trip
     const decoded = Buffer.from(base64, 'base64');
     const restored = VersionedTransaction.deserialize(decoded);
-    
+
     // Check message bytes match
     const isValid = Buffer.from(restored.message.serialize()).equals(
       Buffer.from(transaction.message.serialize())

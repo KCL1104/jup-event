@@ -2,11 +2,11 @@ import {
   Header,
   HeroSection,
   StepsPanel,
-  FlowVisualization,
-  FeatureCards,
   Footer,
   BackgroundEffects,
-  TokenSelectionModal
+  TokenSelectionModal,
+  ExecutionStatusModal,
+  FloatingTelegramButton
 } from './components'
 import { useWallet } from './hooks/useWallet'
 
@@ -15,35 +15,59 @@ function App() {
     walletAddress,
     isLoading,
     isSuccess,
+    isCompleted,
     buttonText,
-    txStatus,
     execute,
     showTokenModal,
     closeTokenModal,
-    executeWithToken
+    executeWithToken,
+    // Execution status modal
+    showExecutionModal,
+    closeExecutionModal,
+    executionProgress,
+    error,
+    // Transfer TX for completed users
+    copyTransferTx,
+    // Mode selection
+    selectedMode,
+    setSelectedMode,
+    // Degen mode
+    degenConfig,
+    setDegenConfig,
+    walletBalances,
+    jupPrice,
+    solPrice,
   } = useWallet()
 
   return (
-    <div className="text-white overflow-x-hidden min-h-screen">
-      <BackgroundEffects />
+    <div className="bg-[#E4EAF2] text-[#0E0F28] flex flex-col font-sans selection:bg-[#2050F2]/30">
+      {/* <BackgroundEffects /> */}
 
       <Header walletAddress={walletAddress} />
 
-      <main className="relative z-10 max-w-7xl mx-auto px-8 py-12">
-        <HeroSection />
-
+      <main className="relative z-10 flex items-center max-w-7xl min-h-[calc(100vh-80px-50px)] mx-auto w-full px-4 sm:px-6 lg:px-12 py-4 sm:py-6">
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 items-start lg:items-center w-full min-w-0">
+          {/* Left Column - Hero & Info */}
+          <HeroSection />
+
+          {/* Right Column - Strategy Panel */}
           <StepsPanel
             isLoading={isLoading}
             isSuccess={isSuccess}
+            isCompleted={isCompleted ?? false}
             buttonText={buttonText}
             onExecute={execute}
+            onCopyTransferTx={copyTransferTx}
+            selectedMode={selectedMode}
+            onModeChange={setSelectedMode}
+            degenConfig={degenConfig}
+            onDegenConfigChange={setDegenConfig}
+            walletBalances={walletBalances}
+            jupPrice={jupPrice}
+            solPrice={solPrice}
           />
-          <FlowVisualization txStatus={txStatus} />
         </div>
-
-        <FeatureCards />
       </main>
 
       <Footer />
@@ -52,12 +76,21 @@ function App() {
       <TokenSelectionModal
         isOpen={showTokenModal}
         onClose={closeTokenModal}
-        onSelect={executeWithToken}
+        onSelect={(token) => executeWithToken(token, selectedMode)}
       />
+
+      {/* Execution Status Modal */}
+      <ExecutionStatusModal
+        isOpen={showExecutionModal}
+        progress={executionProgress}
+        error={error}
+        onClose={closeExecutionModal}
+      />
+
+      {/* Floating Telegram Button */}
+      <FloatingTelegramButton />
     </div>
   )
 }
 
 export default App
-
-
